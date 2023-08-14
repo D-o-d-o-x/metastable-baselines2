@@ -1,0 +1,9 @@
+__pycache__
+.venv
+wandb
+*.egg-info/
+src
+slurm_log
+reports
+MUJOCO_LOG.TXT
+job_hist.log
