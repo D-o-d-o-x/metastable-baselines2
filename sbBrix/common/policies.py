@@ -817,7 +817,7 @@ class Actor(BasePolicy):
             self.mu, self.log_std = self.action_dist.proba_distribution_net(
                 latent_dim=last_layer_dim, return_log_std=True
             )
-            self._remember_log_std = log_std_init
+            self._remember_log_std = th.Tensor([log_std_init])
             # Avoid numerical issues by limiting the mean of the Gaussian
             # to be in [-clip_mean, clip_mean]
             if clip_mean > 0.0:
