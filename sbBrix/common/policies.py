@@ -804,7 +804,7 @@ class Actor(BasePolicy):
         self.latent_pi = nn.Sequential(*latent_pi_net)
         last_layer_dim = net_arch[-1] if len(net_arch) > 0 else features_dim
 
-        assert not self.use_sde and self.use_pca
+        assert not (self.use_sde and self.use_pca)
 
         if self.use_pca:
             self.action_dist = PCA_Distribution(
