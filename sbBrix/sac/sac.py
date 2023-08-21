@@ -12,7 +12,7 @@ from ..common.off_policy_algorithm import BetterOffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
-from stable_baselines3.sac.policies import CnnPolicy, MlpPolicy, MultiInputPolicy, SACPolicy
+from ..common.policies import MlpPolicy, SACPolicy
 
 SelfSAC = TypeVar("SelfSAC", bound="SAC")
 
