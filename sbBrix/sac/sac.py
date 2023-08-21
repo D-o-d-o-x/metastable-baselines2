@@ -12,7 +12,7 @@ from ..common.off_policy_algorithm import BetterOffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
-from ..common.policies import MlpPolicy, SACPolicy
+from ..common.policies import SACPolicy
 
 SelfSAC = TypeVar("SelfSAC", bound="SAC")
 
@@ -79,9 +79,8 @@ class SAC(BetterOffPolicyAlgorithm):
     """
 
     policy_aliases: Dict[str, Type[BasePolicy]] = {
-        "MlpPolicy": MlpPolicy,
-        "CnnPolicy": CnnPolicy,
-        "MultiInputPolicy": MultiInputPolicy,
+        "MlpPolicy": SACPolicy,
+        "SACPolicy": SACPolicy,
     }
 
     def __init__(
