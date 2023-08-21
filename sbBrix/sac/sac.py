@@ -7,7 +7,8 @@ from torch.nn import functional as F
 
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.noise import ActionNoise
-from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+# from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+from common.off_policy_algorithm import BetterOffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
@@ -16,7 +17,7 @@ from stable_baselines3.sac.policies import CnnPolicy, MlpPolicy, MultiInputPolic
 SelfSAC = TypeVar("SelfSAC", bound="SAC")
 
 
-class SAC(OffPolicyAlgorithm):
+class SAC(BetterOffPolicyAlgorithm):
     """
     Soft Actor-Critic (SAC)
     Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor,
@@ -321,4 +322,3 @@ class SAC(OffPolicyAlgorithm):
         else:
             saved_pytorch_variables = ["ent_coef_tensor"]
         return state_dicts, saved_pytorch_variables
-
