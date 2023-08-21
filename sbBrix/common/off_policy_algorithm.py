@@ -85,6 +85,7 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
     ):
         assert not (use_sde and use_pca)
         self.use_pca = use_pca
+        policy_kwargs["use_pca"] = self.use_pca
         super().__init__(
             policy=policy,
             env=env,
