@@ -677,7 +677,7 @@ class ActorCriticPolicy(BasePolicy):
         elif isinstance(self.action_dist, StateDependentNoiseDistribution):
             return self.action_dist.proba_distribution(mean_actions, self.log_std, latent_pi)
         elif isinstance(self.action_dist, PCA_Distribution):
-            return self.action_dist.proba_distribution(mean_actions, self.log_std)
+            return self.action_dist.proba_distribution(mean_actions, th.ones_like(mean_actions) * self.log_std.exp())
         else:
             raise ValueError("Invalid action distribution")
 
