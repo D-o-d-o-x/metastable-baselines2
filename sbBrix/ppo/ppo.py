@@ -208,7 +208,7 @@ class PPO(BetterOnPolicyAlgorithm):
                     actions = rollout_data.actions.long().flatten()
 
                 # Re-sample the noise matrix because the log_std has changed
-                if self.use_sde:
+                if self.use_sde or self.use_pca:
                     self.policy.reset_noise(self.batch_size)
 
                 values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)

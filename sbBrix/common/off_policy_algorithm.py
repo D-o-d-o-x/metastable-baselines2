@@ -498,13 +498,13 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
         if action_noise is not None and env.num_envs > 1 and not isinstance(action_noise, VectorizedActionNoise):
             action_noise = VectorizedActionNoise(action_noise, env.num_envs)
 
-        if self.use_sde:
+        if self.use_sde or self.use_pca:
             self.actor.reset_noise(env.num_envs)
 
         callback.on_rollout_start()
         continue_training = True
         while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
-            if self.use_sde and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
+            if (self.use_sde or self.use_pca) and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
                 self.actor.reset_noise(env.num_envs)
 

@@ -548,8 +548,10 @@ class ActorCriticPolicy(BasePolicy):
 
         :param n_envs:
         """
-        assert isinstance(self.action_dist, StateDependentNoiseDistribution), "reset_noise() is only available when using gSDE"
-        self.action_dist.sample_weights(self.log_std, batch_size=n_envs)
+        if isinstance(self.action_dist, StateDependentNoiseDistribution):
+            self.action_dist.sample_weights(self.log_std, batch_size=n_envs)
+        else:
+            self.action_dist.base_noise.reset()
 
     def _build_mlp_extractor(self) -> None:
         """
@@ -887,8 +889,10 @@ class Actor(BasePolicy):
         :param batch_size:
         """
         msg = "reset_noise() is only available when using gSDE"
-        assert isinstance(self.action_dist, StateDependentNoiseDistribution), msg
-        self.action_dist.sample_weights(self.log_std, batch_size=batch_size)
+        if isinstance(self.action_dist, StateDependentNoiseDistribution):
+            self.action_dist.sample_weights(self.log_std, batch_size=batch_size)
+        else:
+            self.action_dist.base_noise.reset()
 
     def get_action_dist_params(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Dict[str, th.Tensor]]:
         """
@@ -1083,7 +1087,10 @@ class SACPolicy(BasePolicy):
 
         :param batch_size:
         """
-        self.actor.reset_noise(batch_size=batch_size)
+        if isinstance(self.action_space, StateDependentNoiseDistribution):
+            self.actor.reset_noise(batch_size=batch_size)
+        else:
+            self.actor.reset_noise(batch_size=batch_size)
 
     def make_actor(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> Actor:
         actor_kwargs = self._update_features_extractor(self.actor_kwargs, features_extractor)
