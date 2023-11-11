@@ -1,5 +1,5 @@
 from stable_baselines3.common.distributions import *
-from priorConditionedAnnealing import PCA_Distribution
+from metastable_baselines2.pca import PCA_Distribution
 
 
 def _patched_make_proba_distribution(
