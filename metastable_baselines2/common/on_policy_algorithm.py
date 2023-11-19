@@ -1,5 +1,22 @@
-from stable_baselines3.common.on_policy_algorithm import *
+import sys
+import time
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
+import numpy as np
+import torch as th
+from gymnasium import spaces
+
+from stable_baselines3.common.base_class import BaseAlgorithm
+from stable_baselines3.common.buffers import DictRolloutBuffer, RolloutBuffer
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.policies import ActorCriticPolicy
+from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
+from stable_baselines3.common.utils import obs_as_tensor, safe_mean
+from stable_baselines3.common.vec_env import VecEnv
+
+from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
+
+SelfOnPolicyAlgorithm = TypeVar("SelfOnPolicyAlgorithm", bound="BetterOnPolicyAlgorithm")
 
 class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
     """
@@ -21,6 +38,9 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
         instead of action noise exploration (default: False)
     :param sde_sample_freq: Sample a new noise matrix every n steps when using gSDE
         Default: -1 (only sample at the beginning of the rollout)
+    :param use_pca: Whether to use PCA.
+    :param rollout_buffer_class: Rollout buffer class to use. If ``None``, it will be automatically selected.
+    :param rollout_buffer_kwargs: Keyword arguments to pass to the rollout buffer on creation.
     :param stats_window_size: Window size for the rollout logging, specifying the number of episodes to average
         the reported success rate, mean episode length, and mean reward over
     :param tensorboard_log: the log location for tensorboard (if None, no logging)
@@ -50,6 +70,8 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
         use_sde: bool,
         sde_sample_freq: int,
         use_pca: bool,
+        rollout_buffer_class: Optional[Type[RolloutBuffer]] = None,
+        rollout_buffer_kwargs: Optional[Dict[str, Any]] = None,
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
         monitor_wrapper: bool = True,
@@ -62,6 +84,9 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
     ):
         assert not (use_sde and use_pca)
         self.use_pca = use_pca
+
+        assert not rollout_buffer_class and not rollout_buffer_kwargs
+
         super().__init__(
             policy=policy,
             env=env,
@@ -77,6 +102,8 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             device=device,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
+            #rollout_buffer_class = rollout_buffer_class,
+            #rollout_buffer_kwargs = rollout_buffer_kwargs,
             # support_multi_env=True,
             seed=seed,
             stats_window_size=stats_window_size,
@@ -86,13 +113,20 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             _init_setup_model=_init_setup_model
         )
 
+        self.rollout_buffer_class = None
+        self.rollout_buffer_kwargs = {}
+
     def _setup_model(self) -> None:
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, spaces.Dict) else RolloutBuffer
+        if self.rollout_buffer_class is None:
+            if isinstance(self.observation_space, spaces.Dict):
+                self.rollout_buffer_class = DictRolloutBuffer
+            else:
+                self.rollout_buffer_class = RolloutBuffer
 
-        self.rollout_buffer = buffer_cls(
+        self.rollout_buffer = self.rollout_buffer_class(
             self.n_steps,
             self.observation_space,
             self.action_space,
@@ -100,6 +134,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             gamma=self.gamma,
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
+            **self.rollout_buffer_kwargs,
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -158,7 +193,14 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             clipped_actions = actions
             # Clip the actions to avoid out of bound error
             if isinstance(self.action_space, spaces.Box):
-                clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
+                if self.policy.squash_output:
+                    # Unscale the actions to match env bounds
+                    # if they were previously squashed (scaled in [-1, 1])
+                    clipped_actions = self.policy.unscale_action(clipped_actions)
+                else:
+                    # Otherwise, clip the actions to avoid out of bound error
+                    # as we are sampling from an unbounded Gaussian distribution
+                    clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
 
@@ -166,7 +208,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
             # Give access to local variables
             callback.update_locals(locals())
-            if callback.on_step() is False:
+            if not callback.on_step():
                 return False
 
             self._update_info_buffer(infos)
@@ -198,6 +240,8 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
+
+        callback.update_locals(locals())
 
         callback.on_rollout_end()
 
@@ -234,7 +278,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
         while self.num_timesteps < total_timesteps:
             continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
 
-            if continue_training is False:
+            if not continue_training:
                 break
 
             iteration += 1
@@ -242,6 +286,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
+                assert self.ep_info_buffer is not None
                 time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
                 fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
                 self.logger.record("time/iterations", iteration, exclude="tensorboard")

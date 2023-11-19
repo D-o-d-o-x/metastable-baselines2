@@ -1,5 +1,29 @@
-from stable_baselines3.common.off_policy_algorithm import *
+import io
+import pathlib
+import sys
+import time
+import warnings
+from copy import deepcopy
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
+import numpy as np
+import torch as th
+from gymnasium import spaces
+
+from stable_baselines3.common.base_class import BaseAlgorithm
+from stable_baselines3.common.buffers import DictReplayBuffer, ReplayBuffer
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.noise import ActionNoise, VectorizedActionNoise
+from stable_baselines3.common.policies import BasePolicy
+from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
+from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
+from stable_baselines3.common.utils import safe_mean, should_collect_more_steps
+from stable_baselines3.common.vec_env import VecEnv
+from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
+
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+
+SelfOffPolicyAlgorithm = TypeVar("SelfOffPolicyAlgorithm", bound="BetterOffPolicyAlgorithm")
 
 class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
     """
@@ -52,6 +76,8 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
     :param supported_action_spaces: The action spaces supported by the algorithm.
     """
 
+    actor: th.nn.Module
+
     def __init__(
         self,
         policy: Union[str, Type[BasePolicy]],
@@ -68,7 +94,7 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
         replay_buffer_class: Optional[Type[ReplayBuffer]] = None,
         replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
         optimize_memory_usage: bool = False,
-        policy_kwargs: Optional[Dict[str, Any]] = None,
+        policy_kwargs: Optional[Dict[str, Any]] = {},
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
         verbose: int = 0,
@@ -217,6 +243,9 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
             if truncate_last_traj:
                 self.replay_buffer.truncate_last_trajectory()
 
+        # Update saved replay buffer device to match current setting, see GH#1561
+        self.replay_buffer.device = self.device
+
     def _setup_learn(
         self,
         total_timesteps: int,
@@ -248,9 +277,20 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
                 "You should use `reset_num_timesteps=False` or `optimize_memory_usage=False`"
                 "to avoid that issue."
             )
+            assert replay_buffer is not None  # for mypy
             # Go to the previous index
             pos = (replay_buffer.pos - 1) % replay_buffer.buffer_size
             replay_buffer.dones[pos] = True
+
+        assert self.env is not None, "You must set the environment before calling _setup_learn()"
+
+        # Vectorize action noise if needed
+        if (
+            self.action_noise is not None
+            and self.env.num_envs > 1
+            and not isinstance(self.action_noise, VectorizedActionNoise)
+        ):
+            self.action_noise = VectorizedActionNoise(self.action_noise, self.env.num_envs)
 
         return super()._setup_learn(
             total_timesteps,
@@ -279,6 +319,9 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
 
         callback.on_training_start(locals(), globals())
 
+        assert self.env is not None, "You must set the environment before calling learn()"
+        assert isinstance(self.train_freq, TrainFreq)  # check done in _setup_learn()
+
         while self.num_timesteps < total_timesteps:
             rollout = self.collect_rollouts(
                 self.env,
@@ -290,7 +333,7 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
                 log_interval=log_interval,
             )
 
-            if rollout.continue_training is False:
+            if not rollout.continue_training:
                 break
 
             if self.num_timesteps > 0 and self.num_timesteps > self.learning_starts:
@@ -341,6 +384,7 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
             # Note: when using continuous actions,
             # we assume that the policy uses tanh to scale the action
             # We use non-deterministic action in the case of SAC, for TD3, it does not matter
+            assert self._last_obs is not None, "self._last_obs was not set"
             unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
 
         # Rescale the action from [low, high] to [-1, 1]
@@ -364,6 +408,9 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
         """
         Write log.
         """
+        assert self.ep_info_buffer is not None
+        assert self.ep_success_buffer is not None
+
         time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
         fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
         self.logger.record("time/episodes", self._episode_num, exclude="tensorboard")
@@ -520,7 +567,7 @@ class BetterOffPolicyAlgorithm(OffPolicyAlgorithm):
             # Give access to local variables
             callback.update_locals(locals())
             # Only stop training if return value is False, not when it is None.
-            if callback.on_step() is False:
+            if not callback.on_step():
                 return RolloutReturn(num_collected_steps * env.num_envs, num_collected_episodes, continue_training=False)
 
             # Retrieve reward and episode length if using Monitor wrapper

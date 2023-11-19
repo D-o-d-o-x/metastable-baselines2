@@ -34,11 +34,12 @@ from stable_baselines3.common.torch_layers import (
 
 from stable_baselines3.common.policies import ContinuousCritic
 
-from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
+from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
 
 from .distributions import make_proba_distribution
-from metastable_baselines2.pca import PCA_Distribution
+from metastable_baselines2.common.pca import PCA_Distribution
+
 
 SelfBaseModel = TypeVar("SelfBaseModel", bound="BaseModel")
 
@@ -896,7 +897,7 @@ class Actor(BasePolicy):
         else:
             self.action_dist.base_noise.reset()
 
-    def get_action_dist_params(self, obs: PyTorchObs) -> Tuple[th.Tensor, th.Tensor, Dict[str, th.Tensor]]:
+    def get_action_dist_params(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Dict[str, th.Tensor]]:
         """
         Get the parameters for the action distribution.
 
@@ -917,17 +918,17 @@ class Actor(BasePolicy):
         log_std = th.clamp(log_std, LOG_STD_MIN, LOG_STD_MAX)
         return mean_actions, log_std, {}
 
-    def forward(self, obs: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def forward(self, obs: th.Tensor, deterministic: bool = False) -> th.Tensor:
         mean_actions, log_std, kwargs = self.get_action_dist_params(obs)
         # Note: the action is squashed
         return self.action_dist.actions_from_params(mean_actions, log_std, deterministic=deterministic, **kwargs)
 
-    def action_log_prob(self, obs: PyTorchObs) -> Tuple[th.Tensor, th.Tensor]:
+    def action_log_prob(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         mean_actions, log_std, kwargs = self.get_action_dist_params(obs)
         # return action and associated log prob
         return self.action_dist.log_prob_from_params(mean_actions, log_std, **kwargs)
 
-    def _predict(self, observation: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         return self(observation, deterministic)
 
 
@@ -1106,10 +1107,10 @@ class SACPolicy(BasePolicy):
         critic_kwargs = self._update_features_extractor(self.critic_kwargs, features_extractor)
         return ContinuousCritic(**critic_kwargs).to(self.device)
 
-    def forward(self, obs: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def forward(self, obs: th.Tensor, deterministic: bool = False) -> th.Tensor:
         return self._predict(obs, deterministic=deterministic)
 
-    def _predict(self, observation: PyTorchObs, deterministic: bool = False) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         return self.actor(observation, deterministic)
 
     def set_training_mode(self, mode: bool) -> None:

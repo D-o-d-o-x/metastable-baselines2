@@ -113,7 +113,7 @@ class SAC(BetterOffPolicyAlgorithm):
         use_pca: bool = False,
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
-        policy_kwargs: Optional[Dict[str, Any]] = None,
+        policy_kwargs: Optional[Dict[str, Any]] = {},
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
@@ -156,7 +156,7 @@ class SAC(BetterOffPolicyAlgorithm):
         # Inverse of the reward scale
         self.ent_coef = ent_coef
         self.target_update_interval = target_update_interval
-        self.ent_coef_optimizer = Optional[th.optim.Adam] = None
+        self.ent_coef_optimizer = None
 
         if _init_setup_model:
             self._setup_model()

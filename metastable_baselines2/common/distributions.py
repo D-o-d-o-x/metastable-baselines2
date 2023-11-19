@@ -1,6 +1,5 @@
 from stable_baselines3.common.distributions import *
-from metastable_baselines2.pca import PCA_Distribution
-
+from metastable_baselines2.common.pca import PCA_Distribution
 
 def _patched_make_proba_distribution(
     action_space: spaces.Space, use_sde: bool = False, use_pca: bool = False, dist_kwargs: Optional[Dict[str, Any]] = None
