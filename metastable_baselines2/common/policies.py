@@ -34,8 +34,11 @@ from stable_baselines3.common.torch_layers import (
 
 from stable_baselines3.common.policies import ContinuousCritic
 
-from stable_baselines3.common.type_aliases import Schedule
+from stable_baselines3.common.type_aliases import Schedule, RolloutBufferSamples
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
+
+from metastable_projections.projections import BaseProjectionLayer, IdentityProjectionLayer, FrobeniusProjectionLay, WassersteinProjectionLayer, KLProjectionLayer
+
 
 from .distributions import make_proba_distribution
 from metastable_baselines2.common.pca import PCA_Distribution
@@ -395,7 +398,7 @@ class BasePolicy(BaseModel, ABC):
 class ActorCriticPolicy(BasePolicy):
     """
     Policy class for actor-critic algorithms (has both policy and value prediction).
-    Used by A2C, PPO and the likes.
+    Used by A2C, PPO, TRPL and the likes.
 
     :param observation_space: Observation space
     :param action_space: Action space
@@ -445,6 +448,7 @@ class ActorCriticPolicy(BasePolicy):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
         dist_kwargs: Optional[Dict[str, Any]] = {},
+        policy_projection: BaseProjectionLayer = IdentityProjectionLayer(),
     ):
         if optimizer_kwargs is None:
             optimizer_kwargs = {}
@@ -513,6 +517,8 @@ class ActorCriticPolicy(BasePolicy):
         self.use_sde = use_sde
         self.use_pca = use_pca
         self.dist_kwargs = dist_kwargs
+
+        self.policy_projection = policy_projection
 
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, use_pca=use_pca, dist_kwargs=dist_kwargs)
@@ -624,7 +630,7 @@ class ActorCriticPolicy(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
-    def forward(self, obs: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(self, obs: th.Tensor, deterministic: bool = False, conditioned_log_probs: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -644,9 +650,13 @@ class ActorCriticPolicy(BasePolicy):
         values = self.value_net(latent_vf)
         distribution = self._get_action_dist_from_latent(latent_pi)
         actions = distribution.get_actions(deterministic=deterministic)
-        log_prob = distribution.log_prob(actions)
+        if conditioned_log_probs:
+            assert self.use_pca, 'Cannot calculate conditioned log probs when PCA is disabled.'
+            log_prob = distribution.conditioned_log_prob(actions)
+        else:
+            log_prob = distribution.log_prob(actions)
         actions = actions.reshape((-1, *self.action_space.shape))
-        return actions, values, log_prob
+        return actions, values, log_prob, distribution
 
     def extract_features(self, obs: th.Tensor) -> Union[th.Tensor, Tuple[th.Tensor, th.Tensor]]:
         """
@@ -691,7 +701,7 @@ class ActorCriticPolicy(BasePolicy):
         else:
             raise ValueError("Invalid action distribution")
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = False, trajectory: th.Tensor = None) -> th.Tensor:
         """
         Get the action according to the policy for a given observation.
 
@@ -699,19 +709,23 @@ class ActorCriticPolicy(BasePolicy):
         :param deterministic: Whether to use stochastic or deterministic actions
         :return: Taken action according to the policy
         """
-        return self.get_distribution(observation).get_actions(deterministic=deterministic)
+        if self.use_pca:
+            return self.get_distribution(observation).get_actions(deterministic=deterministic, trajectory=trajectory)
+        else:
+            return self.get_distribution(observation).get_actions(deterministic=deterministic)
 
-    def evaluate_actions(self, obs: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor]]:
+    def evaluate_actions(self, rollout_data: RolloutBufferSamples, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor]]:
         """
         Evaluate actions according to the current policy,
         given the observations.
 
-        :param obs: Observation
+        :param rollout_data: The Rollouts (containing )
         :param actions: Actions
         :return: estimated value, log likelihood of taking those actions
             and entropy of the action distribution.
         """
         # Preprocess the observation if needed
+        obs = rollout_data.observations
         features = self.extract_features(obs)
         if self.share_features_extractor:
             latent_pi, latent_vf = self.mlp_extractor(features)
@@ -719,11 +733,13 @@ class ActorCriticPolicy(BasePolicy):
             pi_features, vf_features = features
             latent_pi = self.mlp_extractor.forward_actor(pi_features)
             latent_vf = self.mlp_extractor.forward_critic(vf_features)
-        distribution = self._get_action_dist_from_latent(latent_pi)
+        raw_distribution = self._get_action_dist_from_latent(latent_pi)
+        distribution, old_distribution = self.policy_projection.project_from_rollouts(raw_distribution, rollout_data)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         entropy = distribution.entropy()
-        return values, log_prob, entropy
+        trust_region_loss = self.projection.get_trust_region_loss(raw_distribution, old_distribution)
+        return values, log_prob, entropy, trust_region_loss
 
     def get_distribution(self, obs: th.Tensor) -> Distribution:
         """
@@ -918,18 +934,18 @@ class Actor(BasePolicy):
         log_std = th.clamp(log_std, LOG_STD_MIN, LOG_STD_MAX)
         return mean_actions, log_std, {}
 
-    def forward(self, obs: th.Tensor, deterministic: bool = False) -> th.Tensor:
+    def forward(self, obs: th.Tensor, deterministic: bool = False, trajectory: th.Tensor = None) -> th.Tensor:
         mean_actions, log_std, kwargs = self.get_action_dist_params(obs)
         # Note: the action is squashed
-        return self.action_dist.actions_from_params(mean_actions, log_std, deterministic=deterministic, **kwargs)
+        return self.action_dist.actions_from_params(mean_actions, log_std, deterministic=deterministic, trajectory=trajectory, **kwargs)
 
     def action_log_prob(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
         mean_actions, log_std, kwargs = self.get_action_dist_params(obs)
         # return action and associated log prob
         return self.action_dist.log_prob_from_params(mean_actions, log_std, **kwargs)
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
-        return self(observation, deterministic)
+    def _predict(self, observation: th.Tensor, deterministic: bool = False, trajectory: th.Tensor = None) -> th.Tensor:
+        return self(observation, deterministic, trajectory=trajectory)
 
 
 class SACPolicy(BasePolicy):
@@ -1018,16 +1034,14 @@ class SACPolicy(BasePolicy):
         }
         self.actor_kwargs = self.net_args.copy()
 
-        sde_kwargs = {
+        self.actor_kwargs.update({
             "use_sde": use_sde,
             "use_pca": use_pca,
             "log_std_init": log_std_init,
             "use_expln": use_expln,
             "clip_mean": clip_mean,
             "dist_kwargs": dist_kwargs,
-        }
-
-        self.actor_kwargs.update(sde_kwargs)
+        })
         self.critic_kwargs = self.net_args.copy()
         self.critic_kwargs.update(
             {

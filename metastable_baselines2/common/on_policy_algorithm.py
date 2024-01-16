@@ -8,6 +8,7 @@ from gymnasium import spaces
 
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.buffers import DictRolloutBuffer, RolloutBuffer
+from .buffers import BetterDictRolloutBuffer, BetterRolloutBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
@@ -70,6 +71,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
         use_sde: bool,
         sde_sample_freq: int,
         use_pca: bool,
+        pca_is: bool,
         rollout_buffer_class: Optional[Type[RolloutBuffer]] = None,
         rollout_buffer_kwargs: Optional[Dict[str, Any]] = None,
         stats_window_size: int = 100,
@@ -84,6 +86,9 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
     ):
         assert not (use_sde and use_pca)
         self.use_pca = use_pca
+
+        assert not pca_is or use_pca
+        self.pca_is = pca_is
 
         assert not rollout_buffer_class and not rollout_buffer_kwargs
 
@@ -122,9 +127,9 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
         if self.rollout_buffer_class is None:
             if isinstance(self.observation_space, spaces.Dict):
-                self.rollout_buffer_class = DictRolloutBuffer
+                self.rollout_buffer_class = BetterDictRolloutBuffer
             else:
-                self.rollout_buffer_class = RolloutBuffer
+                self.rollout_buffer_class = BetterRolloutBuffer
 
         self.rollout_buffer = self.rollout_buffer_class(
             self.n_steps,
@@ -186,7 +191,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             with th.no_grad():
                 # Convert to pytorch tensor or to TensorDict
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor)
+                actions, values, log_probs, distributions = self.policy(obs_tensor, conditioned_log_probs=self.pca_is)
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -231,7 +236,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
                         terminal_value = self.policy.predict_values(terminal_obs)[0]
                     rewards[idx] += self.gamma * terminal_value
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, distributions.mean, distributions.scale)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
@@ -253,6 +258,30 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
         Implemented by individual algorithms.
         """
         raise NotImplementedError
+
+    def predict(
+        self,
+        observation: Union[np.ndarray, Dict[str, np.ndarray]],
+        state: Optional[Tuple[np.ndarray, ...]] = None,
+        episode_start: Optional[np.ndarray] = None,
+        deterministic: bool = False,
+        trajectory: th.Tensor = None,
+    ) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
+        """
+        Get the policy action from an observation (and optional hidden state).
+        Includes sugar-coating to handle different observations (e.g. normalizing images).
+
+        :param observation: the input observation
+        :param state: The last hidden states (can be None, used in recurrent policies)
+        :param episode_start: The last masks (can be None, used in recurrent policies)
+            this correspond to beginning of episodes,
+            where the hidden states of the RNN must be reset.
+        :param deterministic: Whether or not to return deterministic actions.
+        :param trajectory: Past trajectory. Only required when using PCA.
+        :return: the model's action and the next hidden state
+            (used in recurrent policies)
+        """
+        return self.policy.predict(observation, state, episode_start, deterministic, trajectory=trajectory)
 
     def learn(
         self: SelfOnPolicyAlgorithm,
