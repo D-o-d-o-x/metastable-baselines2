@@ -95,6 +95,7 @@ class PPO(BetterOnPolicyAlgorithm):
         use_sde: bool = False,
         sde_sample_freq: int = -1,
         use_pca: bool = False,
+        pca_is: bool = False,
         rollout_buffer_class: Optional[Type[RolloutBuffer]] = None,
         rollout_buffer_kwargs: Optional[Dict[str, Any]] = None,
         target_kl: Optional[float] = None,
@@ -119,6 +120,7 @@ class PPO(BetterOnPolicyAlgorithm):
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
             use_pca=use_pca,
+            pca_is=pca_is,
             rollout_buffer_class=rollout_buffer_class,
             rollout_buffer_kwargs=rollout_buffer_kwargs,
             stats_window_size=stats_window_size,
@@ -217,7 +219,7 @@ class PPO(BetterOnPolicyAlgorithm):
                 if self.use_sde or self.use_pca:
                     self.policy.reset_noise(self.batch_size)
 
-                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
+                values, log_prob, entropy, _ = self.policy.evaluate_actions(rollout_data, actions)
                 values = values.flatten()
                 # Normalize advantage
                 advantages = rollout_data.advantages
@@ -226,6 +228,7 @@ class PPO(BetterOnPolicyAlgorithm):
                     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
                 # ratio between old and new policy, should be one at the first iteration
+                # With pca_is=True, old_log_prob will be of the conditioned old dist (doing two Importance Sampling in one)
                 ratio = th.exp(log_prob - rollout_data.old_log_prob)
 
                 # clipped surrogate loss
