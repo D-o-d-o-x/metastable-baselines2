@@ -334,6 +334,7 @@ class BasePolicy(BaseModel, ABC):
         state: Optional[Tuple[np.ndarray, ...]] = None,
         episode_start: Optional[np.ndarray] = None,
         deterministic: bool = False,
+        trajectory = None,
     ) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
         """
         Get the policy action from an observation (and optional hidden state).
@@ -738,7 +739,7 @@ class ActorCriticPolicy(BasePolicy):
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         entropy = distribution.entropy()
-        trust_region_loss = self.projection.get_trust_region_loss(raw_distribution, old_distribution)
+        trust_region_loss = self.policy_projection.get_trust_region_loss(raw_distribution, old_distribution)
         return values, log_prob, entropy, trust_region_loss
 
     def get_distribution(self, obs: th.Tensor) -> Distribution:

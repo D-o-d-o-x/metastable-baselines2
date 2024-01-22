@@ -102,8 +102,8 @@ class BetterRolloutBuffer(RolloutBuffer):
         self.episode_starts = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        self.means = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        self.cov_decomps = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.means = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
+        self.cov_decomps = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.generator_ready = False
         super().reset()
