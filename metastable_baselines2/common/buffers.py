@@ -29,7 +29,7 @@ class BetterRolloutBufferSamples(NamedTuple):
     old_values: th.Tensor
     old_log_prob: th.Tensor
     mean: th.Tensor
-    cov_Decomp: th.Tensor
+    cov_decomp: th.Tensor
     advantages: th.Tensor
     returns: th.Tensor
 
@@ -40,7 +40,7 @@ class BetterDictRolloutBufferSamples(NamedTuple):
     old_values: th.Tensor
     old_log_prob: th.Tensor
     mean: th.Tensor
-    cov_Decomp: th.Tensor
+    cov_decomp: th.Tensor
     advantages: th.Tensor
     returns: th.Tensor
 
@@ -227,8 +227,8 @@ class BetterRolloutBuffer(RolloutBuffer):
             self.actions[batch_inds],
             self.values[batch_inds].flatten(),
             self.log_probs[batch_inds].flatten(),
-            self.means[batch_inds].flatten(),
-            self.cov_decomps[batch_inds].flatten(),
+            np.squeeze(self.means[batch_inds], axis=1),
+            np.squeeze(self.cov_decomps[batch_inds], axis=1),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
         )
