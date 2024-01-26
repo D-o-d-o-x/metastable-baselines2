@@ -116,6 +116,8 @@ class TRPL(BetterOnPolicyAlgorithm):
         self.projection_class = castProjection(projection_class)
         self.projection_kwargs = projection_kwargs
         self.projection = self.projection_class(**self.projection_kwargs)
+        if policy_kwargs is None:
+            policy_kwargs = {}
         policy_kwargs['policy_projection'] = self.projection
 
         super().__init__(
