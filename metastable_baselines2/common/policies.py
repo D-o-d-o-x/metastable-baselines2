@@ -11,6 +11,7 @@ import numpy as np
 import torch as th
 from gymnasium import spaces
 from torch import nn
+import math
 
 from stable_baselines3.common.distributions import (
     BernoulliDistribution,
@@ -512,6 +513,11 @@ class ActorCriticPolicy(BasePolicy):
                 "squash_output": squash_output,
                 "use_expln": use_expln,
                 "learn_features": False,
+            }
+            dist_kwargs.update(add_dist_kwargs)
+        if use_pca:
+            add_dist_kwargs = {
+                "init_std": math.exp(self.log_std_init)
             }
             dist_kwargs.update(add_dist_kwargs)
 
