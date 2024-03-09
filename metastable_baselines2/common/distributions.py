@@ -2,7 +2,7 @@ from stable_baselines3.common.distributions import *
 from metastable_baselines2.common.pca import PCA_Distribution
 
 def _patched_make_proba_distribution(
-    action_space: spaces.Space, use_sde: bool = False, use_pca: bool = False, dist_kwargs: Optional[Dict[str, Any]] = None
+    action_space: spaces.Space, n_envs: int = 1, use_sde: bool = False, use_pca: bool = False, dist_kwargs: Optional[Dict[str, Any]] = None
 ) -> Distribution:
     """
     Return an instance of Distribution for the correct type of action space
@@ -26,7 +26,7 @@ def _patched_make_proba_distribution(
             cls = PCA_Distribution
         else:
             cls = DiagGaussianDistribution
-        return cls(get_action_dim(action_space), **dist_kwargs)
+        return cls(get_action_dim(action_space), n_envs=n_envs, **dist_kwargs)
     elif isinstance(action_space, spaces.Discrete):
         return CategoricalDistribution(action_space.n, **dist_kwargs)
     elif isinstance(action_space, spaces.MultiDiscrete):

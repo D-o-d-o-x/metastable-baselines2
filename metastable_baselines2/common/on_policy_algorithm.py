@@ -92,6 +92,8 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
         assert not rollout_buffer_class and not rollout_buffer_kwargs
 
+        policy_kwargs['dist_kwargs']['n_envs'] = len(env.envs)
+
         super().__init__(
             policy=policy,
             env=env,
