@@ -530,7 +530,7 @@ class ActorCriticPolicy(BasePolicy):
         self.n_envs = dist_kwargs.pop('n_envs', 1)
 
         # Action distribution
-        self.action_dist = make_proba_distribution(action_space, self.n_envs, use_sde=use_sde, use_pca=use_pca, n_envs=self.n_envs, dist_kwargs=dist_kwargs)
+        self.action_dist = make_proba_distribution(action_space,use_sde=use_sde, use_pca=use_pca, n_envs=self.n_envs, dist_kwargs=dist_kwargs)
 
         self._build(lr_schedule)
 
