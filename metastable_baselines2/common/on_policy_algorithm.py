@@ -92,10 +92,6 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
         assert not rollout_buffer_class and not rollout_buffer_kwargs
 
-        if 'dist_kwargs' not in policy_kwargs:
-            policy_kwargs['dist_kwargs'] = {}
-        policy_kwargs['dist_kwargs']['n_envs'] = len(env.envs)
-
         super().__init__(
             policy=policy,
             env=env,
@@ -121,6 +117,10 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             monitor_wrapper=monitor_wrapper,
             _init_setup_model=_init_setup_model
         )
+
+        if 'dist_kwargs' not in self.policy_kwargs:
+            self.policy_kwargs['dist_kwargs'] = {}
+        self.policy_kwargs['dist_kwargs']['n_envs'] = len(self.env.envs)
 
         self.rollout_buffer_class = None
         self.rollout_buffer_kwargs = {}
