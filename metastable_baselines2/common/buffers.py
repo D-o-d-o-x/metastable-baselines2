@@ -87,7 +87,9 @@ class BetterRolloutBuffer(RolloutBuffer):
         gae_lambda: float = 1,
         gamma: float = 0.99,
         n_envs: int = 1,
+        full_cov: bool = False,
     ):
+        self.full_cov = full_cov
         super().__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
         self.gae_lambda = gae_lambda
         self.gamma = gamma
@@ -103,7 +105,10 @@ class BetterRolloutBuffer(RolloutBuffer):
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.means = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
-        self.cov_decomps = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
+        if self.full_cov:
+            self.cov_decomps = np.zeros((self.buffer_size, self.n_envs, self.action_dim, self.action_dim), dtype=np.float32)
+        else:
+            self.cov_decomps = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.generator_ready = False
         super().reset()
@@ -156,6 +161,7 @@ class BetterRolloutBuffer(RolloutBuffer):
         mean: th.Tensor,
         cov_decomp: th.Tensor,
     ) -> None:
+
         """
         :param obs: Observation
         :param action: Action

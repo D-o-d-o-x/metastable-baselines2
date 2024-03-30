@@ -120,7 +120,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
 
         if 'dist_kwargs' not in self.policy_kwargs:
             self.policy_kwargs['dist_kwargs'] = {}
-        self.policy_kwargs['dist_kwargs']['n_envs'] = len(self.env.envs)
+        self.policy_kwargs['dist_kwargs']['n_envs'] = self.env.num_envs if hasattr(self.env, 'num_envs') else 1
 
         self.rollout_buffer_class = None
         self.rollout_buffer_kwargs = {}
@@ -135,6 +135,14 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             else:
                 self.rollout_buffer_class = BetterRolloutBuffer
 
+        self.policy = self.policy_class(  # pytype:disable=not-instantiable
+            self.observation_space,
+            self.action_space,
+            self.lr_schedule,
+            use_sde=self.use_sde,
+            use_pca=self.use_pca,
+            **self.policy_kwargs  # pytype:disable=not-instantiable
+        )
         self.rollout_buffer = self.rollout_buffer_class(
             self.n_steps,
             self.observation_space,
@@ -143,15 +151,8 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
             gamma=self.gamma,
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
+            full_cov=(self.use_pca and self.policy.action_dist.is_full()),
             **self.rollout_buffer_kwargs,
-        )
-        self.policy = self.policy_class(  # pytype:disable=not-instantiable
-            self.observation_space,
-            self.action_space,
-            self.lr_schedule,
-            use_sde=self.use_sde,
-            use_pca=self.use_pca,
-            **self.policy_kwargs  # pytype:disable=not-instantiable
         )
         self.policy = self.policy.to(self.device)
 
@@ -240,7 +241,7 @@ class BetterOnPolicyAlgorithm(OnPolicyAlgorithm):
                         terminal_value = self.policy.predict_values(terminal_obs)[0]
                     rewards[idx] += self.gamma * terminal_value
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, distributions.distribution.mean, distributions.distribution.scale)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, distributions.distribution.mean, distributions.distribution.scale if hasattr(distributions.distribution, 'scale') else distributions.distribution.scale_tril)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
