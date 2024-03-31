@@ -9,11 +9,8 @@ An extension to Stable Baselines 3. Based on Metastable Baselines 1.
 This repo provides:
 
 - An implementation of ["Differentiable Trust Region Layers for Deep Reinforcement Learning" by Fabian Otto et al. (TRPL)](https://arxiv.org/abs/2101.09207)
-- Support for Prior Conditioned Annealing (WIP)
-- Support for Contextual Covariances (Planned)
-- Support for Full Covariances (Planned)
-
-The resulting algorithms can than be tested for their ability of exploration in the enviroments provided by [Fancy Gym](https://github.com/ALRhub/fancy_gym) or [Project Columbus](https://git.dominik-roth.eu/dodox/Columbus)
+- Support for Contextual Covariances (via PCA)
+- Support for Full Covariances (via PCA)
 
 ## Installation
 
