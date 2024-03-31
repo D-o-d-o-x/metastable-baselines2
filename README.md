@@ -65,7 +65,7 @@ We therefore pass `use_pca=True` and `policy_kwargs.dist_kwargs = {'Base_Noise':
 
 ```python
 # We support PPO and TRPL, (SAC is untested, we are open to PRs fixing issues)
-model = TRPL("MlpPolicy", env_id, n_steps=128, seed=0, policy_kwargs=dict(net_arch=[16], ), projection_class=projection, verbose=1)
+model = TRPL("MlpPolicy", env_id, n_steps=128, seed=0, use_pca=True, policy_kwargs=dict(net_arch=[16], dist_kwargs={'par_strengt        h': 'FULL', 'skip_conditioning': True}), projection_class=projection, verbose=1)
 
 model.learn(total_timesteps=100)
 ```
