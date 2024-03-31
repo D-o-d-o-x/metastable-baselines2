@@ -27,6 +27,10 @@ Then install this repo as a package:
 pip install -e .
 ```
 
+If you want to be able to use full / contextual covariances, install with the optional dependency 'pca':
+```bash
+pip install -e '.[pca]'
+```
 ## Usage
 
 ### TRPL
