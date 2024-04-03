@@ -59,7 +59,7 @@ For available projection_kwargs have a look at [Metastable Projections](https://
 
 ### Full Covariance
 
-SB3 does not support full covariances (only diagonal). We still provide support for full covariances via the seperate PCA package. (But since we don't actually want to use PCA ('Prior Conditioned Annealing'), we pass 'skip_conditioning=True'; this will lead to the underlying Noise being used directly.)
+SB3 does not support full covariances (only diagonal). We still provide support for full covariances via the seperate [PCA](https://git.dominik-roth.eu/dodox/PriorConditionedAnnealing) package. (But since we don't actually want to use PCA ('Prior Conditioned Annealing'), we pass 'skip_conditioning=True'; this will lead to the underlying Noise being used directly.)
 
 We therefore pass `use_pca=True` and `policy_kwargs.dist_kwargs = {'Base_Noise': 'WHITE', par_strength: 'FULL', skip_conditioning=True}`
 
