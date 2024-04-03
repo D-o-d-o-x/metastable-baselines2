@@ -9,7 +9,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'gymnasium',
-        'stable_baselines3==2.1.0',
+        'stable_baselines3>=2.1.0,<=2.3.0',
     ],
     extras_require={
         'pca': [
